@@ -40,6 +40,11 @@ spec:
         ports:
         - containerPort: 8080
 
+        volumeMounts:
+          - name: secrets-store
+            mountPath: "/mnt/secrets"
+            readOnly: true
+
         # ✅ Mount Volume Here
 
       # ----------------------------
@@ -56,23 +61,15 @@ spec:
         securityContext:
           runAsNonRoot: true
 
-        volumeMounts:
-          - name: secrets-store
-            mountPath: "/mnt/secrets"
-            readOnly: true
-
       # ✅ Define Volume (PVC)
       volumes:
       - name: data-volume
         persistentVolumeClaim:
           claimName: flask-pvc
           
-
       - name: secrets-store
         csi:
           driver: secrets-store-gke.csi.k8s.io
           readOnly: true
           volumeAttributes:
             secretProviderClass: "gcp-secrets"
-
-

@@ -50,8 +50,10 @@ logger = logging.getLogger(__name__)
 
 DB_HOST = os.getenv("DB_HOST", "127.0.0.1")
 DB_USER = os.getenv("DB_USER")
-DB_PASS = os.getenv("DB_PASS")
 DB_NAME = os.getenv("DB_NAME")
+
+with open(os.getenv("DB_PASS_FILE")) as f:
+    DB_PASS = f.read().strip()
 
 VOLUME_PATH = os.getenv("VOLUME_PATH", "/app/data")
 
