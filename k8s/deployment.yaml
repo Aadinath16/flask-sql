@@ -2,10 +2,18 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: flask-app
-  # namespace: flask-app
+  namespace: default
+  labels:
+    app: flask
 
 spec:
   replicas: 1
+
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
 
   selector:
     matchLabels:
@@ -17,39 +25,71 @@ spec:
         app: flask
 
     spec:
-      serviceAccountName: flask-ksa   # 👈 IMPORTANT
+      serviceAccountName: flask-ksa   # ✅ Workload Identity
 
       containers:
 
-      # ----------------------------
-      # Flask App
-      # ----------------------------
+      # ============================
+      # Flask App Container
+      # ============================
       - name: flask
-        image: IMAGE_PLACEHOLDER
-
-        env:
-        - name: DB_HOST
-          value: "127.0.0.1"
-        - name: DB_USER
-          value: "test"
-        - name: DB_NAME
-          value: "flask_poc"
-        - name: DB_PASS
-          value: "/mnt/secrets/db-password"
+        image: us-docker.pkg.dev/gcp-test-1618-dev/flask-app-repo/flask-sql-app:IMAGE_TAG
+        imagePullPolicy: Always
 
         ports:
-        - containerPort: 8080
+          - containerPort: 8080
 
+        env:
+          - name: DB_HOST
+            value: "127.0.0.1"
+
+          - name: DB_USER
+            value: "test"
+
+          - name: DB_NAME
+            value: "flask_poc"
+
+          - name: DB_PASS_FILE   # ✅ Correct env variable
+            value: "/mnt/secrets/db-password"
+
+          - name: VOLUME_PATH
+            value: "/app/data"
+
+        # ✅ Mount Secret Manager CSI
         volumeMounts:
           - name: secrets-store
             mountPath: "/mnt/secrets"
             readOnly: true
 
-        # ✅ Mount Volume Here
+          - name: data-volume
+            mountPath: "/app/data"
 
-      # ----------------------------
-      # Cloud SQL Proxy
-      # ----------------------------
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "256Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 20
+
+
+      # ============================
+      # Cloud SQL Proxy Sidecar
+      # ============================
       - name: cloud-sql-proxy
         image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.21.0
 
@@ -61,15 +101,109 @@ spec:
         securityContext:
           runAsNonRoot: true
 
-      # ✅ Define Volume (PVC)
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+
+        # (Optional) Mount secrets here if needed later
+        # volumeMounts:
+        #   - name: secrets-store
+        #     mountPath: "/mnt/secrets"
+        #     readOnly: true
+
+
+      # ============================
+      # Volumes
+      # ============================
       volumes:
-      - name: data-volume
-        persistentVolumeClaim:
-          claimName: flask-pvc
+
+        # ✅ Persistent Volume
+        - name: data-volume
+          persistentVolumeClaim:
+            claimName: flask-pvc
+
+        # ✅ Secret Manager CSI Volume
+        - name: secrets-store
+          csi:
+            driver: secrets-store-gke.csi.k8s.io   # ✅ GKE driver
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: "gcp-secrets"
+
+
+# apiVersion: apps/v1
+# kind: Deployment
+# metadata:
+#   name: flask-app
+#   # namespace: flask-app
+
+# spec:
+#   replicas: 1
+
+#   selector:
+#     matchLabels:
+#       app: flask
+
+#   template:
+#     metadata:
+#       labels:
+#         app: flask
+
+#     spec:
+#       serviceAccountName: flask-ksa   # 👈 IMPORTANT
+
+#       containers:
+
+#       # ----------------------------
+#       # Flask App
+#       # ----------------------------
+#       - name: flask
+#         image: IMAGE_PLACEHOLDER
+
+#         env:
+#         - name: DB_HOST
+#           value: "127.0.0.1"
+#         - name: DB_USER
+#           value: "test"
+#         - name: DB_NAME
+#           value: "flask_poc"
+#         - name: DB_PASS_FILE   # ✅ FIX
+#           value: "/mnt/secrets/db-password"
+
+#         ports:
+#         - containerPort: 8080
+
+#         volumeMounts:
+#           - name: secrets-store
+#             mountPath: "/mnt/secrets"
+#             readOnly: true
+
+#         # ✅ Mount Volume Here
+
+#       # ----------------------------
+#       # Cloud SQL Proxy
+#       # ----------------------------
+#       - name: cloud-sql-proxy
+#         image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.21.0
+
+#         args:
+#           - "--private-ip"
+#           - "--structured-logs"
+#           - "gcp-test-1618-dev:us-central1:gcp-test-1618-sql-dev"
+
+#         securityContext:
+#           runAsNonRoot: true
+
+#       # ✅ Define Volume (PVC)
+#       volumes:
+#       - name: data-volume
+#         persistentVolumeClaim:
+#           claimName: flask-pvc
           
-      - name: secrets-store
-        csi:
-          driver: secrets-store-gke.csi.k8s.io
-          readOnly: true
-          volumeAttributes:
-            secretProviderClass: "gcp-secrets"
+#       - name: secrets-store
+#         csi:
+#           driver: secrets-store-gke.csi.k8s.io
+#           readOnly: true
+#           volumeAttributes:
+#             secretProviderClass: "gcp-secrets"
