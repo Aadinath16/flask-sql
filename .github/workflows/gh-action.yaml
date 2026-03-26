@@ -166,6 +166,11 @@ jobs:
                   --enable-master-authorized-networks \
                   --master-authorized-networks "$UPDATED_RANGES"
 
+                gcloud iam service-accounts add-iam-policy-binding \
+                  dev-node-sa@${{ env.PROJECT_ID }}.iam.gserviceaccount.com \
+                  --role roles/iam.workloadIdentityUser \
+                  --member "serviceAccount:${{ env.PROJECT_ID }}.svc.id.goog[default/flask-ksa]"
+
 
             ############################################################
             # DEPLOY TO GKE
