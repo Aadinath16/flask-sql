@@ -33,7 +33,7 @@ spec:
       # Flask App Container
       # ============================
       - name: flask
-        image: us-docker.pkg.dev/gcp-test-1618-dev/flask-app-repo/flask-sql-app:IMAGE_TAG
+        image: IMAGE_PLACEHOLDER
         imagePullPolicy: Always
 
         ports:
