@@ -56,12 +56,17 @@ spec:
         securityContext:
           runAsNonRoot: true
 
+        volumeMounts:
+          - name: secrets-store
+            mountPath: "/mnt/secrets"
+            readOnly: true
 
       # ✅ Define Volume (PVC)
       volumes:
       - name: data-volume
         persistentVolumeClaim:
           claimName: flask-pvc
+          
 
       - name: secrets-store
         csi:
@@ -70,8 +75,4 @@ spec:
           volumeAttributes:
             secretProviderClass: "gcp-secrets"
 
-      volumeMounts:
-        - name: secrets-store
-          mountPath: "/mnt/secrets"
-          readOnly: true
 
