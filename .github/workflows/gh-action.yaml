@@ -13,7 +13,7 @@ env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   GAR_LOCATION: us
   REPO_NAME: flask-app-repo
-  IMAGE_NAME: autoscaler-app
+  IMAGE_NAME: flask-sql-app
   CLUSTER_NAME: gke-dev
   CLUSTER_LOCATION: us-central1
     
