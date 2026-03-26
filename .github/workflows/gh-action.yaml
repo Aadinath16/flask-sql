@@ -1,0 +1,197 @@
+name : flask-gke-poc
+
+on:
+    push:
+        branches: 
+            - dev
+            - feat
+    pull_request:
+        branches:
+            - main
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  GAR_LOCATION: us
+  REPO_NAME: flask-app-repo
+  IMAGE_NAME: autoscaler-app
+  CLUSTER_NAME: gke-dev
+  CLUSTER_LOCATION: us-central1
+    
+jobs:
+    build:
+        name: Image Build & Push
+        runs-on: ubuntu-latest
+        
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+
+            ############################################################
+            # OLD AUTHENTICATION APPROACH (COMMENTED)
+            ############################################################
+            #
+            # - name: Set up gcloud
+            #   uses: google-github-actions/setup-gcloud@v2
+            #   with:
+            #     project_id: ${{ env.PROJECT_ID }}
+            #     service_account_key: ${{ secrets.GCP_SA_KEY }}
+            #     export_default_credentials: true
+            #
+            # - name: Authenticate with Google Cloud
+            #   uses: google-github-actions/auth@v2
+            #   with:
+            #     credentials_json: '${{ secrets.GCP_SA_KEY }}'
+            #
+            ############################################################
+
+
+            ############################################################
+            # CORRECT AUTHENTICATION APPROACH
+            ############################################################
+            - name: Authenticate to Google Cloud
+              uses: google-github-actions/auth@v2
+              with:
+                credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+            - name: Setup gcloud SDK
+              uses: google-github-actions/setup-gcloud@v2
+            ############################################################
+
+
+            ############################################################
+            # OLD ARTIFACT REGISTRY CONFIG (COMMENTED)
+            ############################################################
+            #
+            # - name: Configure Artifact Registry
+            #   run: |
+            #     gcloud auth configure-docker us-docker.pkg.dev
+            #
+            ############################################################
+
+
+            ############################################################
+            # FIXED ARTIFACT REGISTRY CONFIG
+            ############################################################
+            - name: Configure Artifact Registry
+              run: |
+                gcloud auth configure-docker ${{ env.GAR_LOCATION }}-docker.pkg.dev
+            ############################################################
+
+
+            ############################################################
+            # IMAGE TAG GENERATION
+            ############################################################
+            - name: Set environment variables
+              id: set-env
+              run: |
+                if [[ "${GITHUB_REF_NAME}" == "main" ]]; then
+                    echo "environment=prod" >> $GITHUB_OUTPUT
+                    echo "image_tag=1.0.0-${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+                else
+                    echo "environment=dev" >> $GITHUB_OUTPUT
+                    echo "image_tag=1.0.0-dev-${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+                fi
+
+
+            ############################################################
+            # BUILD DOCKER IMAGE
+            ############################################################
+            - name: Build docker image
+              run: |
+                docker build -t ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.IMAGE_NAME }}:${{ steps.set-env.outputs.image_tag }} .
+
+
+            ############################################################
+            # PUSH DOCKER IMAGE
+            ############################################################
+            - name: Push Docker image
+              run: |
+                docker push ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.IMAGE_NAME }}:${{ steps.set-env.outputs.image_tag }}
+
+
+            ############################################################
+            # GET GKE CREDENTIALS
+            ############################################################
+
+            # FIXED VERSION
+            - name: Get GKE Credentials
+              uses: google-github-actions/get-gke-credentials@v2
+              with:
+                cluster_name: ${{ env.CLUSTER_NAME }}
+                location: ${{ env.CLUSTER_LOCATION }}
+
+
+            ############################################################
+            # UPDATE DEPLOYMENT IMAGE
+            ############################################################
+
+            # OLD BROKEN VERSION (COMMENTED)
+            #
+            # - name: Update Deployment Image
+            #   run: |
+            #     IMAGE=${GAR_REGION}-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE_NAME:$IMAGE_TAG
+            #     sed -i "s|IMAGE_PLACEHOLDER|$IMAGE|g" k8s/deployment.yaml
+
+
+            # FIXED VERSION
+            - name: Update Deployment Image
+              run: |
+                IMAGE=${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.IMAGE_NAME }}:${{ steps.set-env.outputs.image_tag }}
+                sed -i "s|IMAGE_PLACEHOLDER|$IMAGE|g" k8s/deployment.yaml
+                sed -i "s|PROJECT_ID|${{ env.PROJECT_ID }}|g" k8s/secret.yaml
+
+
+            - name: Whitelist GitHub Runner IP
+              id: whitelist-ip
+              run: |
+                RUNNER_IP=$(curl -s https://api.ipify.org)
+
+                echo "Runner IP: $RUNNER_IP"
+
+                EXISTING_RANGES=$(gcloud container clusters describe $CLUSTER_NAME \
+                      --region $CLUSTER_LOCATION \
+                      --format="value(masterAuthorizedNetworksConfig.cidrBlocks[].cidrBlock)" \
+                      | tr '\n' ',' | tr ';' ',' | sed 's/,$//')
+
+                echo "Existing ranges: $EXISTING_RANGES"
+
+                UPDATED_RANGES="${EXISTING_RANGES},${RUNNER_IP}/32"
+
+                echo "UPDATED_RANGES=$UPDATED_RANGES" >> $GITHUB_ENV
+                echo "RUNNER_IP=$RUNNER_IP" >> $GITHUB_ENV
+
+                gcloud container clusters update $CLUSTER_NAME \
+                  --region $CLUSTER_LOCATION \
+                  --enable-master-authorized-networks \
+                  --master-authorized-networks "$UPDATED_RANGES"
+
+
+            ############################################################
+            # DEPLOY TO GKE
+            ############################################################
+            - name: Deploy to GKE
+              run: |
+                kubectl apply -f k8s/
+
+            ############################################################
+            # VERIFY ROLLING UPDATE
+            ############################################################
+            - name: Verify Deployment
+              run: |
+                kubectl rollout status deployment/autoscaler-app
+
+            - name: Remove GitHub Runner IP
+              if: always()
+              run: |
+                EXISTING_RANGES=$(gcloud container clusters describe $CLUSTER_NAME \
+                  --region $CLUSTER_LOCATION \
+                  --format="value(masterAuthorizedNetworksConfig.cidrBlocks[].cidrBlock)" \
+                  | tr '\n' ',' | tr ';' ',' | sed 's/,$//')
+
+                CLEAN_RANGES=$(echo $EXISTING_RANGES | sed "s/,${RUNNER_IP}\/32//g" | sed "s/${RUNNER_IP}\/32,//g")
+
+                gcloud container clusters update $CLUSTER_NAME \
+                  --region $CLUSTER_LOCATION \
+                  --enable-master-authorized-networks \
+                  --master-authorized-networks "$CLEAN_RANGES"

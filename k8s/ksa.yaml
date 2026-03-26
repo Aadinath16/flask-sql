@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: flask-ksa
+  # namespace: flask-app
+  annotations:
+    iam.gke.io/gcp-service-account: dev-node-sa@gcp-test-1618-dev.iam.gserviceaccount.com

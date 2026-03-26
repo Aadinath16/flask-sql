@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <title>Flask GKE POC</title>
+
+    <link rel="stylesheet" href="/static/style.css">
+
+</head>
+
+
+<body>
+
+<h1>🚀 Flask GKE POC Dashboard</h1>
+
+
+<!-- Add User -->
+
+<div class="card">
+
+    <h2>➕ Add User</h2>
+
+    <input id="name" placeholder="Name">
+    <input id="email" placeholder="Email">
+    <input id="city" placeholder="City">   <!-- 👈 NEW -->
+
+    <button onclick="addUser()">Add</button>
+
+</div>
+
+
+<!-- Fetch Users -->
+
+<div class="card">
+
+    <h2>📄 Fetch Users</h2>
+
+    <button onclick="fetchUsers()">Load</button>
+
+    <pre id="users"></pre>
+
+</div>
+
+
+<!-- SQL -->
+
+<div class="card">
+
+    <h2>🛠️ Run SQL</h2>
+
+    <textarea id="query"></textarea>
+
+    <button onclick="runQuery()">Run</button>
+
+    <pre id="queryResult"></pre>
+
+</div>
+
+
+<!-- Metrics -->
+
+<div class="card">
+
+    <h2>📊 Monitoring</h2>
+
+    <button onclick="callApi('/api/metrics/200')">200</button>
+    <button onclick="callApi('/api/metrics/400')">400</button>
+    <button onclick="callApi('/api/metrics/500')">500</button>
+
+</div>
+
+
+<!-- Volume -->
+
+<div class="card">
+
+    <h2>💾 Volume</h2>
+
+    <button onclick="writeVolume()">Write</button>
+    <button onclick="readVolume()">Read</button>
+
+    <pre id="volumeData"></pre>
+
+</div>
+
+
+<!-- Response -->
+
+<div class="card">
+
+    <h2>📥 Response</h2>
+
+    <pre id="response"></pre>
+
+</div>
+
+
+<hr>
+
+
+<script src="/static/app.js"></script>
+
+</body>
+
+</html>

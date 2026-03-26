@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flask-app
+  labels:
+    app: flask-app
+
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: flask-app
+
+  template:
+    metadata:
+      labels:
+        app: flask-app
+
+    spec:
+
+      # If using Workload Identity
+      serviceAccountName: flask-ksa
+
+      containers:
+
+      - name: flask
+        image: gcr.io/YOUR_PROJECT_ID/flask-app:latest
+        imagePullPolicy: Always
+
+        ports:
+        - containerPort: 8080
+
+        env:
+
+        # Cloud SQL Connection Details
+        - name: DB_HOST
+          value: "PRIVATE_IP_OF_CLOUD_SQL"
+
+        - name: DB_NAME
+          value: "your_database"
+
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: db-secret
+              key: username
+
+        - name: DB_PASS
+          valueFrom:
+            secretKeyRef:
+              name: db-secret
+              key: password
+
+
+        # Volume Mount
+        volumeMounts:
+        - name: data-volume
+          mountPath: /data
+
+
+        # Health Checks (Optional but Recommended)
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 15
+
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 10
+
+
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+
+
+      volumes:
+      - name: data-volume
+        persistentVolumeClaim:
+          claimName: flask-pvc

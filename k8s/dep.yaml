@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flask-app
+  # namespace: flask-app
+
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: flask
+
+  template:
+    metadata:
+      labels:
+        app: flask
+
+    spec:
+      serviceAccountName: flask-ksa   # 👈 IMPORTANT
+
+      containers:
+
+      # ----------------------------
+      # Flask App
+      # ----------------------------
+      - name: flask
+        image: IMAGE_PLACEHOLDER
+
+        env:
+        - name: DB_HOST
+          value: "127.0.0.1"
+        - name: DB_USER
+          value: "test"
+        - name: DB_NAME
+          value: "flask_poc"
+        - name: DB_PASS
+          value: "/mnt/secrets/db-password"
+
+        ports:
+        - containerPort: 8080
+
+        # ✅ Mount Volume Here
+
+      # ----------------------------
+      # Cloud SQL Proxy
+      # ----------------------------
+      - name: cloud-sql-proxy
+        image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.21.0
+
+        args:
+          - "--private-ip"
+          - "--structured-logs"
+          - "gcp-test-1618-dev:us-central1:gcp-test-1618-sql-dev"
+
+        securityContext:
+          runAsNonRoot: true
+
+
+      # ✅ Define Volume (PVC)
+      volumes:
+      - name: data-volume
+        persistentVolumeClaim:
+          claimName: flask-pvc
+
+      - name: secrets-store
+        csi:
+          driver: secrets-store.csi.k8s.io
+          readOnly: true
+          volumeAttributes:
+            secretProviderClass: "gcp-secrets"
+
+      volumeMounts:
+        - name: secrets-store
+          mountPath: "/mnt/secrets"
+          readOnly: true
+
