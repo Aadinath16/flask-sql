@@ -123,6 +123,29 @@ jobs:
 
 
             ############################################################
+            # Adding Secret to GCP Secret Manager
+            ############################################################
+
+            # Create secret if not exists
+            - name: Create Secret (if not exists)
+              run: |
+                if ! gcloud secrets describe db-password --project=$PROJECT_ID >/dev/null 2>&1; then
+                  echo "Creating secret..."
+                  echo "${{ secrets.DB_PASSWORD }}" | gcloud secrets create db-password \
+                    --data-file=- \
+                    --replication-policy="automatic"
+                else
+                  echo "Secret already exists"
+                fi
+
+            # Add new version ONLY if value changes
+            - name: Update Secret (new version)
+              run: |
+                echo "${{ secrets.DB_PASSWORD }}" | gcloud secrets versions add db-password \
+                  --data-file=-
+
+
+            ############################################################
             # UPDATE DEPLOYMENT IMAGE
             ############################################################
 
